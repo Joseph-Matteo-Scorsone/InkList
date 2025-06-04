@@ -206,3 +206,73 @@ const inklist_lib = b.createModule(.{
 exe_mod.addImport("InkList_lib", inklist_lib);
 ```
 
+# Example project
+```
+const std = @import("std");
+const InkList_lib = @import("InkList_lib");
+const Engine = InkList_lib.Engine;
+const Message = InkList_lib.Message;
+
+// Example actor that counts messages:
+const CounterActor = struct {
+    allocator: std.mem.Allocator,
+    count: std.atomic.Value(i32),
+
+    pub fn init(allocator: std.mem.Allocator) !*CounterActor {
+        const self = try allocator.create(CounterActor);
+        self.allocator = allocator;
+        self.count = std.atomic.Value(i32).init(0);
+        return self;
+    }
+
+    pub fn deinit(self: *CounterActor) void {
+        self.allocator.destroy(self);
+    }
+
+    pub fn receive(self: *CounterActor, allocator: std.mem.Allocator, msg: *Message) void {
+        _ = allocator;
+        // Every time we get a custom payload, increment the counter.
+        switch (msg.instruction) {
+            .custom => |_| {
+                _ = self.count.fetchAdd(1, .seq_cst);
+            },
+            .func => |f| {
+                // For handler payloads, call the handler’s function:
+                f.call_fn(f.context, @ptrCast(self));
+            },
+        }
+    }
+};
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Initialize an Engine with a 4-thread pool, capacity for 16 actors.
+    var engine = try Engine.init(allocator, .{ .allocator = allocator, .n_jobs = 4 }, 16);
+    defer engine.deinit();
+
+    // Spawn a CounterActor
+    const actor_id = try engine.spawnActor(CounterActor);
+
+    // Send 10 custom messages
+    for (0..10) |i| {
+        const msg = try Message.makeCustomPayload(allocator, @as(i32, @intCast(i)), "increment");
+        try engine.sendMessage(actor_id, msg);
+    }
+
+    // Wait for all messages to be processed
+    try engine.waitForActor(actor_id);
+
+    // Retrieve actor state and print the final count
+    const counter_ptr = try engine.getActorState(CounterActor, actor_id);
+    const final_count = counter_ptr.count.load(.seq_cst);
+    std.log.info("CounterActor final count: {d}", .{final_count});
+}
+```
+
+# License
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+Please don't hesitate to request things, suggest things :)
