@@ -1,0 +1,7 @@
+# Zig build artifacts and caches
+.zig-cache/
+zig-out/
+
+# Editor and IDE files
+.vscode/
+*.code-workspace
