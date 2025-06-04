@@ -180,8 +180,6 @@ Defined inside engine.zig.
 
 - Context: std.hash_map.AutoContext(i32) to manage internal hashing and bucket logic.
 
-- Ensures safe concurrent put, get, and remove operations via lock‐free mechanisms in Zig’s standard library.
-
 ## LockFreeQueue
 
 #### Type: pub const LockFreeQueue(ItemType) = /* lock‐free linked queue implementation */;
@@ -194,4 +192,17 @@ Defined inside engine.zig.
 
 - dequeue() returns the next msg or returns an error if the queue is empty.
 
-- Under the hood, typically uses atomic pointers for head/tail and a dummy sentinel node.
+# Installation
+
+Clone the repo:
+```git clone https://github.com/Joseph-Matteo-Scorsone/InkList.git```
+
+## Integrate into build.zig
+```
+const inklist_lib = b.createModule(.{
+        .root_source_file = b.path("InkList/src/root.zig"),
+    });
+
+exe.addImport("InkList_lib", inklist_lib);
+```
+
