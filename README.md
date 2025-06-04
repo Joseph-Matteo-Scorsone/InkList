@@ -201,8 +201,8 @@ Clone the repo:
 ```
 const inklist_lib = b.createModule(.{
         .root_source_file = b.path("InkList/src/root.zig"),
-    });
+});
 
-exe.addImport("InkList_lib", inklist_lib);
+exe_mod.addImport("InkList_lib", inklist_lib);
 ```
 
