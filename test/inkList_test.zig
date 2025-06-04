@@ -18,7 +18,6 @@ const TestActor = struct {
 
     allocator: Allocator,
     messages: std.ArrayList(StoredMessage),
-    mutex: std.Thread.Mutex,
 
     /// Creates a new actor with a pre-allocated message buffer.
     /// Returns a pointer to the initialized actor or an error if allocation fails.
@@ -29,7 +28,6 @@ const TestActor = struct {
         self.* = .{
             .allocator = allocator,
             .messages = try std.ArrayList(StoredMessage).initCapacity(allocator, 2100),
-            .mutex = .{},
         };
         return self;
     }
@@ -44,11 +42,7 @@ const TestActor = struct {
     }
 
     /// Processes an incoming message, storing custom payloads or executing functions.
-    /// Thread-safe with mutex protection.
     pub fn receive(self: *Self, allocator: Allocator, msg: *Message) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
         switch (msg.instruction) {
             .custom => |str| {
                 const copied_str = allocator.dupe(u8, str) catch {

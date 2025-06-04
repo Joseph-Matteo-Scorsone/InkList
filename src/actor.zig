@@ -29,7 +29,6 @@ pub fn Actor(comptime TStruct: type) type {
         t_struct: *TStruct,
         message_queue: *LockFreeQueue(*Message),
         wg: WaitGroup,
-        queue_mutex: Mutex,
         stop_flag: AtomicBool,
         thread_pool: *std.Thread.Pool,
 
@@ -46,7 +45,6 @@ pub fn Actor(comptime TStruct: type) type {
                 .t_struct = t_struct,
                 .message_queue = queue,
                 .wg = .{}, // Initialize synchronization primitive
-                .queue_mutex = .{},
                 .stop_flag = AtomicBool.init(false),
                 .thread_pool = thread_pool,
             };
