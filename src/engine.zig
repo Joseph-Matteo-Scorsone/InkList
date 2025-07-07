@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Mutex = std.Thread.Mutex;
-const AtomicI32 = std.atomic.Value(i32);
+const AtomicU64 = std.atomic.Value(u64);
 
 const ConcurrentHashMap = @import("concurrentHashMap.zig").ConcurrentHashMap;
 const Actor = @import("actor.zig").Actor;
@@ -45,7 +45,7 @@ const ActorHandle = struct {
 /// Periodically sends messages to an actor until stopped.
 const PeriodicSender = struct {
     engine: *Engine,
-    actor_id: i32,
+    actor_id: u64,
     msg: *Message,
     delay_ns: u64,
     stop_flag: std.atomic.Value(bool),
@@ -53,7 +53,7 @@ const PeriodicSender = struct {
     wait_group: std.Thread.WaitGroup,
 
     /// Initializes a sender to periodically deliver a cloned message to an actor.
-    pub fn init(allocator: Allocator, engine: *Engine, actor_id: i32, msg: *Message, delay_ns: u64) !*PeriodicSender {
+    pub fn init(allocator: Allocator, engine: *Engine, actor_id: u64, msg: *Message, delay_ns: u64) !*PeriodicSender {
         if (delay_ns == 0) return error.InvalidDelay;
         const self = try allocator.create(PeriodicSender);
         const cloned_msg = try msg.clone(allocator);
@@ -104,11 +104,11 @@ const PeriodicSender = struct {
 /// Manages a collection of actors, handling their creation, messaging, and cleanup.
 pub const Engine = struct {
     const Self = @This();
-    const ActorMap = ConcurrentHashMap(i32, *ActorHandle, std.hash_map.AutoContext(i32));
+    const ActorMap = ConcurrentHashMap(u64, *ActorHandle, std.hash_map.AutoContext(u64));
 
     allocator: Allocator,
     actors: ActorMap,
-    next_actor_id: AtomicI32,
+    next_actor_id: AtomicU64,
     mutex: Mutex,
     thread_pool: *std.Thread.Pool,
 
@@ -126,14 +126,14 @@ pub const Engine = struct {
         return Self{
             .allocator = allocator,
             .actors = actors,
-            .next_actor_id = AtomicI32.init(0),
+            .next_actor_id = AtomicU64.init(0),
             .mutex = .{},
             .thread_pool = thread_pool,
         };
     }
 
     /// Spawns a new actor of type TStruct, assigning a unique ID.
-    pub fn spawnActor(self: *Self, comptime TStruct: type) !i32 {
+    pub fn spawnActor(self: *Self, comptime TStruct: type) !u64 {
         comptime {
             if (!@hasDecl(TStruct, "init")) @compileError("TStruct must implement 'init' method.");
             if (!@hasDecl(TStruct, "deinit")) @compileError("TStruct must implement 'deinit' method.");
@@ -154,7 +154,7 @@ pub const Engine = struct {
     }
 
     /// Sends a message to the actor with the specified ID.
-    pub fn sendMessage(self: *Self, actor_id: i32, msg: *Message) !void {
+    pub fn sendMessage(self: *Self, actor_id: u64, msg: *Message) !void {
         if (self.actors.get(actor_id)) |handle_ptr| {
             try handle_ptr.send_fn(handle_ptr.actor_ptr, msg);
         } else {
@@ -163,14 +163,14 @@ pub const Engine = struct {
     }
 
     /// Starts a periodic sender to deliver messages to an actor at regular intervals.
-    pub fn sendEvery(self: *Self, actor_id: i32, msg: *Message, delay_ns: u64) !*PeriodicSender {
+    pub fn sendEvery(self: *Self, actor_id: u64, msg: *Message, delay_ns: u64) !*PeriodicSender {
         const sender = try PeriodicSender.init(self.allocator, self, actor_id, msg, delay_ns);
         try sender.start();
         return sender;
     }
 
     /// Waits for the specified actor to complete processing.
-    pub fn waitForActor(self: *Self, actor_id: i32) !void {
+    pub fn waitForActor(self: *Self, actor_id: u64) !void {
         if (self.actors.get(actor_id)) |handle_ptr| {
             handle_ptr.wait_fn(handle_ptr.actor_ptr);
         } else {
@@ -179,10 +179,25 @@ pub const Engine = struct {
     }
 
     /// Retrieves the state of the actor with the specified ID.
-    pub fn getActorState(self: *Self, comptime TStruct: type, actor_id: i32) !*TStruct {
+    pub fn getActorState(self: *Self, comptime TStruct: type, actor_id: u64) !*TStruct {
         if (self.actors.get(actor_id)) |handle_ptr| {
             const actor = @as(*Actor(TStruct), @ptrCast(@alignCast(handle_ptr.actor_ptr)));
             return actor.t_struct;
+        } else {
+            return error.ActorNotFound;
+        }
+    }
+
+    /// Cleans up one actor by deinitializing and removing it.
+    pub fn poisonActor(self: *Self, comptime TStruct: type, actor_id: u64) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        if (self.actors.get(actor_id)) |handle_ptr| {
+            const actor = @as(*Actor(TStruct), @ptrCast(@alignCast(handle_ptr.actor_ptr)));
+            _ = self.actors.remove(actor.actor_id);
+            actor.deinit();
+            self.allocator.destroy(handle_ptr);
         } else {
             return error.ActorNotFound;
         }

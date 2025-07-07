@@ -24,12 +24,12 @@ pub const InstructionPayload = union(enum) {
 /// Messages contain sender id and instruction payloads to process
 pub const Message = struct {
     const Self = @This();
-    sender_id: i32,
+    sender_id: u64,
     instruction: InstructionPayload,
 
     /// Creates a new Message with the given sender ID and instruction.
     /// Allocates memory using the provided allocator
-    pub fn init(allocator: Allocator, sender_id: i32, instruction: InstructionPayload) !*Self {
+    pub fn init(allocator: Allocator, sender_id: u64, instruction: InstructionPayload) !*Self {
         const self = try allocator.create(Self);
         self.* = .{ .sender_id = sender_id, .instruction = instruction };
         return self;
@@ -77,7 +77,7 @@ pub const Message = struct {
     /// Creates a Message with a function-based payload.
     pub fn makeFuncPayload(
         allocator: Allocator,
-        sender_id: i32,
+        sender_id: u64,
         call_fn: *const fn (*anyopaque, *anyopaque) void,
         context: *anyopaque,
         deinit_fn: ?*const fn (*anyopaque, Allocator) void,
@@ -99,7 +99,7 @@ pub const Message = struct {
     }
 
     /// Creates a Message with a custom string payload.
-    pub fn makeCustomPayload(allocator: Allocator, sender_id: i32, custom: []const u8) !*Self {
+    pub fn makeCustomPayload(allocator: Allocator, sender_id: u64, custom: []const u8) !*Self {
         const msg = try allocator.create(Self);
         const duped_custom = try allocator.dupe(u8, custom); // Duplicate the string
         msg.* = .{

@@ -24,7 +24,7 @@ pub fn Actor(comptime TStruct: type) type {
     return struct {
         const Self = @This();
 
-        actor_id: i32,
+        actor_id: u64,
         allocator: Allocator,
         t_struct: *TStruct,
         message_queue: *LockFreeQueue(*Message),
@@ -33,7 +33,7 @@ pub fn Actor(comptime TStruct: type) type {
         thread_pool: *std.Thread.Pool,
 
         /// Initializes an actor with a lock-free message queue and thread pool.
-        pub fn init(allocator: Allocator, t_struct: *TStruct, actor_id: i32, thread_pool: *std.Thread.Pool) !*Self {
+        pub fn init(allocator: Allocator, t_struct: *TStruct, actor_id: u64, thread_pool: *std.Thread.Pool) !*Self {
             const self = try allocator.create(Self);
             errdefer allocator.destroy(self);
 

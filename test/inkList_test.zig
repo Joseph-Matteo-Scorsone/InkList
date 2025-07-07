@@ -7,7 +7,7 @@ const Message = @import("InkList_lib").Message;
 
 // Represents a stored message with sender information and payload.
 const StoredMessage = struct {
-    sender_id: i32,
+    sender_id: u64,
     sequence_id: u64, // Tracks message order for sequencing.
     payload: []const u8,
 };
@@ -131,6 +131,9 @@ test "Spawn actor" {
 
     const actor_id = try engine.spawnActor(TestActor);
     std.log.info("Spawned actor with ID {d}", .{actor_id});
+
+    // can poison actor, engine.deinit() would handle it
+    try engine.poisonActor(TestActor, actor_id);
 }
 
 // Tests sending and receiving a single custom message.
@@ -151,6 +154,9 @@ test "Send and receive one message" {
     const actor = try engine.getActorState(TestActor, actor_id);
     try std.testing.expectEqual(@as(usize, 1), actor.messages.items.len);
     try std.testing.expectEqualStrings("Hello", actor.messages.items[0].payload);
+    
+    // can poison actor, engine.deinit() would handle it
+    try engine.poisonActor(TestActor, actor_id);
 }
 
 // Tests sending and receiving a message with a handler function.
@@ -198,7 +204,7 @@ test "Create custom message" {
     const msg = try Message.makeCustomPayload(allocator, 42, "Test Custom");
     defer msg.deinit(allocator);
 
-    try std.testing.expectEqual(@as(i32, 42), msg.sender_id);
+    try std.testing.expectEqual(@as(u64, 42), msg.sender_id);
     try std.testing.expectEqualStrings("Test Custom", msg.instruction.custom);
 }
 
@@ -216,9 +222,9 @@ test "Multiple actors and messages" {
 
     const payloads = [_][]const u8{ "msg1", "msg2", "msg3", "msg4" };
     for (payloads, 0..) |msg, i| {
-        const m1 = try Message.makeCustomPayload(allocator, 100 + @as(i32, @intCast(i)), msg);
+        const m1 = try Message.makeCustomPayload(allocator, 100 + @as(u64, @intCast(i)), msg);
         try engine.sendMessage(actor1_id, m1);
-        const m2 = try Message.makeCustomPayload(allocator, 200 + @as(i32, @intCast(i)), msg);
+        const m2 = try Message.makeCustomPayload(allocator, 200 + @as(u64, @intCast(i)), msg);
         try engine.sendMessage(actor2_id, m2);
     }
 
@@ -242,9 +248,9 @@ test "Actor receives messages in order" {
 
     const actor_id = try engine.spawnActor(TestActor);
 
-    const size: i32 = 5;
+    const size: u64 = 5;
     for (0..size) |i| {
-        const msg = try Message.makeCustomPayload(allocator, @as(i32, @intCast(i)), "msg");
+        const msg = try Message.makeCustomPayload(allocator, @as(u64, @intCast(i)), "msg");
         try engine.sendMessage(actor_id, msg);
     }
 
@@ -268,10 +274,10 @@ test "High volume of concurrent messages" {
     const actor_id_two = try engine.spawnActor(TestActor);
 
     for (0..NUM_MESSAGES) |i| {
-        const msg = try Message.makeCustomPayload(allocator, @as(i32, @intCast(i)), "bulk");
+        const msg = try Message.makeCustomPayload(allocator, @as(u64, @intCast(i)), "bulk");
         try engine.sendMessage(actor_id, msg);
 
-        const msg_two = try Message.makeCustomPayload(allocator, @as(i32, @intCast(i)), "bulk");
+        const msg_two = try Message.makeCustomPayload(allocator, @as(u64, @intCast(i)), "bulk");
         try engine.sendMessage(actor_id_two, msg_two);
     }
 
@@ -300,7 +306,7 @@ test "Send multiple handler messages" {
         const handler = try allocator.create(MessageHandler);
         handler.* = .{
             .message = StoredMessage{
-                .sender_id = @as(i32, @intCast(i)),
+                .sender_id = @as(u64, @intCast(i)),
                 .sequence_id = i,
                 .payload = try allocator.dupe(u8, p),
             },
@@ -308,7 +314,7 @@ test "Send multiple handler messages" {
 
         const msg = try Message.makeFuncPayload(
             allocator,
-            @as(i32, @intCast(i)),
+            @as(u64, @intCast(i)),
             &MessageHandler.call,
             @ptrCast(handler),
             &MessageHandler.deinit,
@@ -380,7 +386,7 @@ test "Handler clone duplicates correctly" {
 
     const clone = @as(*MessageHandler, @ptrCast(@alignCast(clone_ptr)));
     try std.testing.expectEqualStrings("clone test", clone.message.payload);
-    try std.testing.expectEqual(@as(i32, 1), clone.message.sender_id);
+    try std.testing.expectEqual(@as(u64, 1), clone.message.sender_id);
     try std.testing.expectEqual(@as(u64, 0), clone.message.sequence_id);
 
     MessageHandler.deinit(@ptrCast(original), allocator);
