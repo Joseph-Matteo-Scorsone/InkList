@@ -216,12 +216,12 @@ const Message = InkList_lib.Message;
 // Example actor that counts messages:
 const CounterActor = struct {
     allocator: std.mem.Allocator,
-    count: std.atomic.Value(i32),
+    count: std.atomic.Value(u64),
 
     pub fn init(allocator: std.mem.Allocator) !*CounterActor {
         const self = try allocator.create(CounterActor);
         self.allocator = allocator;
-        self.count = std.atomic.Value(i32).init(0);
+        self.count = std.atomic.Value(u64).init(0);
         return self;
     }
 
@@ -258,7 +258,7 @@ pub fn main() !void {
 
     // Send 10 custom messages
     for (0..10) |i| {
-        const msg = try Message.makeCustomPayload(allocator, @as(i32, @intCast(i)), "increment");
+        const msg = try Message.makeCustomPayload(allocator, @as(u64, @intCast(i)), "increment");
         try engine.sendMessage(actor_id, msg);
     }
 
@@ -270,6 +270,7 @@ pub fn main() !void {
     const final_count = counter_ptr.count.load(.seq_cst);
     std.log.info("CounterActor final count: {d}", .{final_count});
 }
+
 ```
 
 # License
