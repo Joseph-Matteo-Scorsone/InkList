@@ -43,7 +43,7 @@ Graceful Shutdown:
 
 ## Engine
 
-- Holds a ConcurrentHashMap(i32, *ActorHandle) mapping actor_id → ActorHandle.
+- Holds a ConcurrentHashMap(u64, *ActorHandle) mapping actor_id → ActorHandle.
 
 - Maintains a shared std.Thread.Pool for dispatching work items (message processing).
 
@@ -75,7 +75,7 @@ Graceful Shutdown:
 
 - Key Fields:
 
-- actor_id: i32
+- actor_id: u64
 
 - t_struct: *TStruct
 
@@ -117,7 +117,7 @@ Graceful Shutdown:
 
 - pub const InstructionPayload = union(enum) { custom: []const u8, func: struct { ... } };
 
-- pub const Message = struct { sender_id: i32, instruction: InstructionPayload, ... }
+- pub const Message = struct { sender_id: u64, instruction: InstructionPayload, ... }
 
 ### Core Methods:
 
@@ -172,13 +172,13 @@ Defined inside engine.zig.
 
 #### Usage:
 
-- The Engine uses ConcurrentHashMap(i32, *ActorHandle, AutoContext(i32)):
+- The Engine uses ConcurrentHashMap(u64, *ActorHandle, AutoContext(u64)):
 
-- Key: actor_id: i32
+- Key: actor_id: u64
 
 - Value: *ActorHandle
 
-- Context: std.hash_map.AutoContext(i32) to manage internal hashing and bucket logic.
+- Context: std.hash_map.AutoContext(u64) to manage internal hashing and bucket logic.
 
 ## LockFreeQueue
 
