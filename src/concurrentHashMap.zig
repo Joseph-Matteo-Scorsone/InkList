@@ -17,7 +17,7 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
         const Self = @This();
         buckets: Atomic(*[]?*Node(K, V)), // Atomic pointer to the array of buckets for thread-safe access
         allocator: Allocator, // Memory allocator for dynamic memory management
-        mutex: std.Thread.Mutex, // Mutex to synchronize resizing and iteration
+        rwlock: std.Thread.RwLock, // Read-write lock for concurrent reads and exclusive writes
         size: Atomic(usize), // Number of buckets in the hashmap
         count: Atomic(usize), // Number of key-value pairs stored
         resizing: Atomic(bool), // Flag to indicate if resizing is in progress
@@ -29,9 +29,9 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
             bucket_index: usize, // Current bucket index being processed
             current_node: ?*Node(K, V), // Current node in the bucket's linked list
 
-            // Initializes an iterator for the hashmap, locking the mutex to ensure thread safety during iteration.
+            // Initializes an iterator for the hashmap, acquiring a shared lock to allow concurrent reads.
             pub fn init(map: *Self) Iterator {
-                map.mutex.lock(); // Prevent modifications during iteration
+                map.rwlock.lockShared(); // Allow multiple readers during iteration
                 return Iterator{
                     .map = map,
                     .bucket_index = 0,
@@ -39,9 +39,9 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
                 };
             }
 
-            // Releases the mutex when iteration is complete, ensuring thread safety.
+            // Releases the shared lock when iteration is complete.
             pub fn deinit(self: *Iterator) void {
-                self.map.mutex.unlock(); // Allow modifications after iteration
+                self.map.rwlock.unlockShared(); // Release shared lock after iteration
             }
 
             // Retrieves the next key-value pair in the iteration, or null if none remain.
@@ -63,7 +63,7 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
                     self.bucket_index += 1; // Skip empty bucket
                 }
 
-                // No more entries; mutex remains locked until deinit
+                // No more entries; shared lock remains until deinit
                 return null;
             }
         };
@@ -79,7 +79,7 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
             return Self{
                 .buckets = Atomic(*[]?*Node(K, V)).init(buckets_ptr),
                 .allocator = allocator,
-                .mutex = .{},
+                .rwlock = .{}, // Initialize read-write lock
                 .size = Atomic(usize).init(size),
                 .count = Atomic(usize).init(0),
                 .resizing = Atomic(bool).init(false),
@@ -157,8 +157,8 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
                     if (load_factor > 0.75 and !self.resizing.load(.seq_cst)) {
                         // Attempt to set resizing flag atomically
                         if (@cmpxchgStrong(bool, &self.resizing.raw, false, true, .seq_cst, .seq_cst) == null) {
-                            self.mutex.lock();
-                            defer self.mutex.unlock();
+                            self.rwlock.lock(); // Acquire exclusive lock for resizing
+                            defer self.rwlock.unlock();
                             // Recheck size and load factor to confirm resize necessity
                             const current_size = self.size.load(.seq_cst);
                             if (current_size == size and @as(f64, @floatFromInt(self.count.load(.seq_cst))) / @as(f64, @floatFromInt(current_size)) > 0.75) {
@@ -274,7 +274,7 @@ pub fn ConcurrentHashMap(comptime K: type, comptime V: type, comptime Context: t
 
         // Resizes the hashmap to a new size, rehashing all existing entries.
         pub fn resize(self: *Self, new_size: usize) !void {
-            // Assumes mutex is held and resizing flag is set
+            // Assumes exclusive lock is held and resizing flag is set
             const current_size = self.size.load(.seq_cst);
             if (new_size <= current_size) return; // No resize needed if new size is smaller or equal
 
